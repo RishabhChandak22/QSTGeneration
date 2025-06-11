@@ -1,5 +1,4 @@
 # QSTGeneration
-# QSTGeneration
 
 This project implements basic text generation using a pretrained GPT-2 language model. It demonstrates how to tokenize input prompts, generate continuations, and decode model output using the Hugging Face Transformers library.
 
