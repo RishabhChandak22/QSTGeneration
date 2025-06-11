@@ -1,14 +1,13 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 
+model = AutoModelForCausalLM.from_pretrained("./checkpoints")
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-model_name = "gpt2"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model.eval()
 
-input_text = "Who is the greatest baseball player of all time?"
+prompt = "Who is the greatest baseball player of all time?"
+inputs = tokenizer(prompt, return_tensors="pt")
 
-inputs = tokenizer(input_text, return_tensors="pt")
-outputs = model.generate(**inputs, max_new_tokens=50)
-
+outputs = model.generate(**inputs, max_length=50)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-
