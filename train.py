@@ -1,53 +1,51 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
-from datasets import load_dataset
-import torch
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    Trainer,
+    TrainingArguments,
+    DataCollatorForLanguageModeling,
+)
+import datasets
 
-model_name = "gpt2"
-dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
-dataset["train"] = dataset["train"].select(range(200))  # or even 50
-dataset["validation"] = dataset["validation"].select(range(50))
+ds = datasets.load_dataset("json", data_files="quotes.jsonl", split="train")
 
-
+model_name = "./checkpoints"          
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model     = AutoModelForCausalLM.from_pretrained(model_name)
 
-def tokenize_function(example):
-    return tokenizer(example["text"], return_special_tokens_mask=True)
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
 
-tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
-block_size = 128
 
-def group_texts(examples):
-    concatenated = {k: sum(examples[k], []) for k in examples.keys()}
-    total_length = len(concatenated["input_ids"])
-    total_length = (total_length // block_size) * block_size
-    result = {
-        k: [t[i:i + block_size] for i in range(0, total_length, block_size)]
-        for k, t in concatenated.items()
-    }
-    result["labels"] = result["input_ids"].copy()
-    return result
+def tokenize_fn(example):
+    return tokenizer(example["text"], truncation=True, max_length=128)
+tokenized = ds.map(tokenize_fn, batched=True)
 
-lm_dataset = tokenized_dataset.map(group_texts, batched=True)
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer, mlm=False
+)
 
 training_args = TrainingArguments(
-    output_dir="./checkpoints",
-    overwrite_output_dir=True,
-    per_device_train_batch_size=2,
-    per_device_eval_batch_size=2,
-    evaluation_strategy="epoch",
-    logging_dir="./logs",
-    num_train_epochs=1,
+    output_dir="checkpoints-finetuned",
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=2,
+    num_train_epochs=10,
+    learning_rate=5e-5,
+    fp16=False,
     save_total_limit=2,
-    fp16=torch.cuda.is_available(),
+    logging_steps=50,
+    save_steps=200,
+    weight_decay=0.01,
 )
 
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset=lm_dataset["train"],
-    eval_dataset=lm_dataset["validation"],
+    train_dataset=tokenized,
+    data_collator=data_collator,
 )
 
 trainer.train()
-trainer.save_model("./checkpoints")
+trainer.save_model("checkpoints-finetuned")
+tokenizer.save_pretrained("checkpoints-finetuned")
+
